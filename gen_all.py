@@ -56,5 +56,8 @@ have = lambda n: n in defined
 L.append('static void gems_cop_impl_reset(void) { %s }' % ('gcop_reset();' if have('gcop_reset') else ''))
 L.append('static void gems_zanzou_begin(void) { %s }' % ('gcop_zanzou_begin();' if have('gcop_zanzou_begin') else ''))
 L.append('static bool gems_zanzou_feed(uint32_t w) { %s }' % ('return gcop_zanzou_feed(w);' if have('gcop_zanzou_feed') else '(void)w; return true;'))
-open(out, 'w').write('\n'.join(L) + '\n')
+text = '\n'.join(L) + '\n'
+# Left alone when nothing changed, so a build that runs this every time stays incremental.
+if not os.path.exists(out) or open(out).read() != text:
+    open(out, 'w').write(text)
 print('%s: %d traps, %d COP ops' % (out, len(traps), sum(1 for l in L if l.startswith('    [0x'))))

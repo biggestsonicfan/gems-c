@@ -31,6 +31,10 @@ static void gcop_62(void) {
     m[6] = fmaf(s0, s2, -(c2 * (c0 * s1)));
     m[2] = s1;
     m[4] = fmaf(c0, c2, -(s1 * (s0 * s2)));
+    /* The GC's order (0x80023c2c), kept on purpose.  The board (cpres1.asm
+     * _L211C0, PM 0x211C0) multiplies (s0*s1)*c2, and m[3], m[4] and m[6]
+     * agree with it, but it also rounds both products and the add separately,
+     * toward zero.  The board's order alone would still not give its bits. */
     m[7] = fmaf(c0, s2, s1 * (c2 * s0));
     m[8] = c1 * c2;
     m[5] = -(c1 * s2);

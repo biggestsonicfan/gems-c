@@ -14,15 +14,15 @@ static void gcop_32(void) {
     float inv = 1.0f / scale;
     float p0 = v0 * inv;
     float k = K * inv;
-    float dv = -fmaf(v1, inv, -p0);          /* fnmsubs: p0 - v1*inv */
+    float dv = p0 - v1 * inv;
     float u = k * t;
     float dv2 = dv + dv;
     float c3 = msum + dv2;
-    float r = fmaf(c3, u, -dv2);              /* fmsubs */
+    float r = c3 * u - dv2;
     r = r - dv;
     r = r - msum;
     r = r - m0;
-    r = fmaf(u, r, m0);
-    r = fmaf(u, r, p0);
+    r = u * r + m0;
+    r = u * r + p0;
     gems_out_f(scale * r);
 }

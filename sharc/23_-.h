@@ -8,5 +8,5 @@ static void gcop_23(void) {
         return;
     }
     float rad = (6.2831854820251465f * (float)a) / 65536.0f;
-    gems_out_f((float)gch_800aea20((double)rad));
+    gems_out_f((float)gcop_fp_nearest(gch_800aea20, (double)rad));
 }

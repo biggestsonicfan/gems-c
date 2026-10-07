@@ -30,8 +30,8 @@ static void gcop_3a(void) {
             /* Signed, so a cell below 0 wraps to the top (-3 -> 61).  From the
              * PS2 build (0x15ff40: cvt.w.s, andi 0x3f), which matches the
              * board (r2=fix f8; r2 and 0x3f); the GC one makes it 0. */
-            lo_tab[(uint32_t)gch_fctiwz(fmaf(8.0f, lo, 32.0f) - 0.5f) & 63u] |= bit;
-            hi_tab[(uint32_t)gch_fctiwz(fmaf(8.0f, hi, 32.0f) - 0.5f) & 63u] |= bit;
+            lo_tab[(uint32_t)gch_fctiwz((8.0f * lo + 32.0f) - 0.5f) & 63u] |= bit;
+            hi_tab[(uint32_t)gch_fctiwz((8.0f * hi + 32.0f) - 0.5f) & 63u] |= bit;
         }
         for (int j = 1; j < 63; j++) lo_tab[j] |= lo_tab[j - 1];
         for (int j = 1; j < 63; j++) hi_tab[63 - j] |= hi_tab[64 - j];
@@ -47,10 +47,10 @@ static void gcop_3a(void) {
             if (take && kind_b != 4u) r = r * *gems_dmf(0x307F0u);   /* state+8128 */
             lo = lo - r;
             hi = hi + r;
-            float v = fmaf(8.0f, lo, 32.0f);
+            float v = 8.0f * lo + 32.0f;
             if (v < 0.0f || v >= 64.0f) { gems_bram_wr(0x3E20u + i, 0); continue; }
             uint32_t from_hi = hi_tab[gch_800a2544(v - 0.5f) & 63u];
-            float w = fmaf(8.0f, hi, 32.0f);
+            float w = 8.0f * hi + 32.0f;
             if (w < 0.0f || w >= 64.0f) { gems_bram_wr(0x3E20u + i, 0); continue; }
             uint32_t both = lo_tab[gch_800a2544(w - 0.5f) & 63u] & from_hi;
             gems_bram_wr(0x3E20u + i, both & gems_bram_rd(0x3E20u + i));

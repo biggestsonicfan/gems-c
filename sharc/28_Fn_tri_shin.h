@@ -12,5 +12,5 @@ static void gcop_28(void) {
     gems_out_w((uint16_t)(0x4000 - ang));
     float x = ((c2 + b2) - a2) / (2.0f * b);
     gems_out_f(x);
-    gems_out_f(gch_8001e084(-fmaf(x, x, -c2)));   /* fnmsubs */
+    gems_out_f(gch_8001e084(c2 - x * x));
 }

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Write gems_all.h: every fn/*.h and sharc/*.h, and the tables gems.h wants.
 Only functions that are defined go in the tables, so a half-converted tree
-builds. Usage: gen_all.py [out_path]  (default: gems_all.h beside this file)."""
+builds. Usage: gen_all.py [--cop-only] [out_path]  (default: gems_all.h beside
+this file). --cop-only leaves out fn/ and the trap table: the COP handlers
+alone, for tools/cop_replay."""
 import os, re, sys, glob
 D = os.path.dirname(os.path.abspath(__file__))
-out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(D, 'gems_all.h')
-fn_files = sorted(glob.glob(os.path.join(D, 'fn', '*.h')))
-sh_first = [os.path.join(D, 'sharc', f) for f in ('state.h', 'helpers.h')]
+args = sys.argv[1:]
+cop_only = '--cop-only' in args
+args = [a for a in args if a != '--cop-only']
+out = args[0] if args else os.path.join(D, 'gems_all.h')
+fn_files = [] if cop_only else sorted(glob.glob(os.path.join(D, 'fn', '*.h')))
+sh_first = [os.path.join(D, 'sharc', f) for f in ('fpenv.h', 'state.h', 'helpers.h')]
 sh_first = [f for f in sh_first if os.path.exists(f)]
 sh_files = sorted(f for f in glob.glob(os.path.join(D, 'sharc', '*.h')) if f not in sh_first)
 defined = set()
@@ -45,17 +50,25 @@ L.append('static const gems_trap_t gems_traps[] = {')
 L += ['    { 0x%05X, gfn_%s, "%s" },' % (a, n, n) for a, n in traps] or ['    { 0, 0, 0 },']
 L.append('};')
 L.append('static const size_t gems_trap_count = %d;' % len(traps))
+# Each handler runs in the SHARC's float mode (sharc/fpenv.h): gcop_NN_board.
+table = [op for op in sorted(ops) if 'gcop_%02x' % op in defined and 'gcop_%02x' % op not in empty]
+for op in table:
+    L.append('static void gcop_%02x_board(void) { gcop_board_run(gcop_%02x); }' % (op, op))
 L.append('static const gems_cop_op_t gems_cop_ops[GEMS_COP_OPS] = {')
-for op in sorted(ops):
-    if 'gcop_%02x' % op in defined and 'gcop_%02x' % op not in empty:
-        args, name = ops[op]
-        a = 'COP_ARGS_STREAM' if op == 0x80 else str(args)
-        L.append('    [0x%02X] = { gcop_%02x, %s, "%s" },' % (op, op, a, name if name != '-' else 'op_%02x' % op))
+for op in table:
+    args, name = ops[op]
+    a = 'COP_ARGS_STREAM' if op == 0x80 else str(args)
+    L.append('    [0x%02X] = { gcop_%02x_board, %s, "%s" },' % (op, op, a, name if name != '-' else 'op_%02x' % op))
 L.append('};')
 have = lambda n: n in defined
-L.append('static void gems_cop_impl_reset(void) { %s }' % ('gcop_reset();' if have('gcop_reset') else ''))
-L.append('static void gems_zanzou_begin(void) { %s }' % ('gcop_zanzou_begin();' if have('gcop_zanzou_begin') else ''))
-L.append('static bool gems_zanzou_feed(uint32_t w) { %s }' % ('return gcop_zanzou_feed(w);' if have('gcop_zanzou_feed') else '(void)w; return true;'))
+L.append('static void gems_cop_impl_reset(void) { %s }' % ('gcop_board_run(gcop_reset);' if have('gcop_reset') else ''))
+L.append('static void gems_zanzou_begin(void) { %s }' % ('gcop_board_run(gcop_zanzou_begin);' if have('gcop_zanzou_begin') else ''))
+if have('gcop_zanzou_feed'):
+    L.append('static uint32_t gems_zanzou_w; static bool gems_zanzou_done;')
+    L.append('static void gems_zanzou_feed_board(void) { gems_zanzou_done = gcop_zanzou_feed(gems_zanzou_w); }')
+    L.append('static bool gems_zanzou_feed(uint32_t w) { gems_zanzou_w = w; gcop_board_run(gems_zanzou_feed_board); return gems_zanzou_done; }')
+else:
+    L.append('static bool gems_zanzou_feed(uint32_t w) { (void)w; return true; }')
 text = '\n'.join(L) + '\n'
 # Left alone when nothing changed, so a build that runs this every time stays incremental.
 if not os.path.exists(out) or open(out).read() != text:

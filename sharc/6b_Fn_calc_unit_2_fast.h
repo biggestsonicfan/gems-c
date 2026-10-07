@@ -49,11 +49,11 @@ static void gcop_6b(void) {
     float dy = py - m[10];
     float dx = px - m[9];
     float dz = pz - m[11];
-    G[3] = fmaf(m[2], dz, fmaf(m[0], dx, m[1] * dy));
+    G[3] = m[2] * dz + (m[0] * dx + m[1] * dy);
     float qx = G[3] * G[3];
-    G[4] = -fmaf(m[5], dz, fmaf(m[3], dx, m[4] * dy));
+    G[4] = -(m[5] * dz + (m[3] * dx + m[4] * dy));
     float q = qx + G[4] * G[4];
-    G[5] = fmaf(m[8], dz, fmaf(m[6], dx, m[7] * dy));
+    G[5] = m[8] * dz + (m[6] * dx + m[7] * dy);
     G[1] = gch_8001e084(q + G[5] * G[5]);           /* distance to the target */
     float r = gch_8001e174(q);
     G[8] = 1.0f / G[1];
@@ -71,7 +71,7 @@ static void gcop_6b(void) {
         G[11] = l2 * l2;
         /* cosine at the root */
         float cs = ((G[10] + G[9]) - G[11]) / (2.0f * (d * l1));
-        float sn = gch_8001e084(-fmaf(cs, cs, -1.0f));
+        float sn = gch_8001e084(1.0f - cs * cs);
         if (flag == 0) sn = -sn;
         gch_8001e694(g6b_clamp(sn), g6b_clamp(cs), gch_cur());
         g6b_store((uint32_t)gcs_7c90);
@@ -79,7 +79,7 @@ static void gcop_6b(void) {
         /* cosine at the joint */
         float cj = ((G[9] + G[11]) - G[10]) / (2.0f * (G[0] * G[2]));
         cs = -cj;
-        sn = gch_8001e084(-fmaf(cj, cj, -1.0f));
+        sn = gch_8001e084(1.0f - cj * cj);
         if (flag != 0) sn = -sn;
         gch_8001e694(g6b_clamp(sn), g6b_clamp(cs), gch_cur());
         g6b_store((uint32_t)gcs_7c94);

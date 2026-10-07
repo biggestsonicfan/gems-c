@@ -44,9 +44,9 @@ static void g80_finish(uint32_t turn) {
         float d = d9 + (d11 + d10);
         if (d >= max) max = d;
 
-        float e10 = fmaf(sp, c[1], c[10]) - fmaf(sp, p[1], p[10]);
-        float e11 = fmaf(sp, c[2], c[11]) - fmaf(sp, p[2], p[11]);
-        float e9  = fmaf(sp, c[0], c[9]) - fmaf(sp, p[0], p[9]);
+        float e10 = (sp * c[1] + c[10]) - (sp * p[1] + p[10]);
+        float e11 = (sp * c[2] + c[11]) - (sp * p[2] + p[11]);
+        float e9  = (sp * c[0] + c[9]) - (sp * p[0] + p[9]);
         e10 = e10 * e10;
         e11 = e11 * e11;
         e9  = e9 * e9;
@@ -76,12 +76,12 @@ static void g80_finish(uint32_t turn) {
         S[w] = f & 1u;
         float *q = Sf + w + 22u;
         float q0 = q[0], q1 = q[1], q2 = q[2];
-        q[0] = fmaf(q0, c, -(q[3] * s));
-        q[3] = fmaf(q0, s, q[3] * c);
-        q[1] = fmaf(q1, c, -(q[4] * s));
-        q[4] = fmaf(q1, s, q[4] * c);
-        q[2] = fmaf(q2, c, -(q[5] * s));
-        q[5] = fmaf(q2, s, q[5] * c);
+        q[0] = q0 * c - q[3] * s;
+        q[3] = q0 * s + q[3] * c;
+        q[1] = q1 * c - q[4] * s;
+        q[4] = q1 * s + q[4] * c;
+        q[2] = q2 * c - q[5] * s;
+        q[5] = q2 * s + q[5] * c;
     }
 }
 

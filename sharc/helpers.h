@@ -3,10 +3,12 @@
  * collision helpers, FUN_800axxxx the CodeWarrior runtime and MSL fdlibm.
  * Prototypes and conventions: helpers_protos.h.
  *
- * Every float operation is the PowerPC's own: fadds/fmuls/fdivs are single
- * precision, fmadds a*c+b is fmaf(a, c, b), fmsubs fmaf(a, c, -b), fnmadds
- * -fmaf(a, c, b), fnmsubs -fmaf(a, c, -b); the double ops and fma likewise.
- * Operation order is the PowerPC's, never simplified. */
+ * Floats are single precision, as on the PowerPC and the SHARC. The GC's
+ * fused multiply-adds (fmadds a*c+b, fmsubs a*c-b, fnmadds, fnmsubs) are
+ * written as a multiply and an add, each rounded on its own, because the
+ * board's SHARC has no FMA (fpenv.h has its rounding). Operation order is the
+ * GC's, never simplified, except where a sum is checked against the board's
+ * firmware (cpres1.asm) and written in its order; those say so. */
 #ifndef GEMS_SHARC_HELPERS_H
 #define GEMS_SHARC_HELPERS_H
 
@@ -129,8 +131,8 @@ static void gch_compose(const float *a, const float *b, float *out) {
     for (int c = 0; c < 4; c++)
         for (int j = 0; j < 3; j++) {
             t = b[3 + j] * a[3 * c + 1];
-            t = fmaf(b[j], a[3 * c], t);
-            t = fmaf(b[6 + j], a[3 * c + 2], t);
+            t = b[j] * a[3 * c] + t;
+            t = b[6 + j] * a[3 * c + 2] + t;
             o[3 * c + j] = c < 3 ? t : b[9 + j] + t;
         }
     memcpy(out, o, sizeof o);
@@ -151,19 +153,19 @@ static void gch_8001e270(uint32_t idx) {
     float *o = gems_dmf(0x30000u + 771u);       /* state + 0xC0C */
     float m0 = m[0], m1 = m[1], m2 = m[2], m3 = m[3], m4 = m[4], m5 = m[5];
     float m6 = m[6], m7 = m[7], m8 = m[8], m9 = m[9], m10 = m[10], m11 = m[11];
-    o[0] = fmaf(m4, m8, -(m5 * m7));
-    o[3] = fmaf(m5, m6, -(m3 * m8));
-    o[6] = fmaf(m3, m7, -(m4 * m6));
-    o[1] = fmaf(m7, m2, -(m8 * m1));
-    o[4] = fmaf(m8, m0, -(m6 * m2));
-    o[7] = fmaf(m6, m1, -(m7 * m0));
-    o[2] = fmaf(m1, m5, -(m2 * m4));
-    o[5] = fmaf(m2, m3, -(m0 * m5));
-    o[8] = fmaf(m0, m4, -(m1 * m3));
-    o[9]  = -fmaf(m11, o[6], fmaf(m9, o[0], m10 * o[3]));
-    o[10] = -fmaf(m11, o[7], fmaf(m9, o[1], m10 * o[4]));
-    o[11] = -fmaf(m11, o[8], fmaf(m9, o[2], m10 * o[5]));
-    float det = fmaf(m2, o[6], fmaf(m0, o[0], m1 * o[3]));
+    o[0] = m4 * m8 - m5 * m7;
+    o[3] = m5 * m6 - m3 * m8;
+    o[6] = m3 * m7 - m4 * m6;
+    o[1] = m7 * m2 - m8 * m1;
+    o[4] = m8 * m0 - m6 * m2;
+    o[7] = m6 * m1 - m7 * m0;
+    o[2] = m1 * m5 - m2 * m4;
+    o[5] = m2 * m3 - m0 * m5;
+    o[8] = m0 * m4 - m1 * m3;
+    o[9]  = -(m11 * o[6] + (m9 * o[0] + m10 * o[3]));
+    o[10] = -(m11 * o[7] + (m9 * o[1] + m10 * o[4]));
+    o[11] = -(m11 * o[8] + (m9 * o[2] + m10 * o[5]));
+    float det = m2 * o[6] + (m0 * o[0] + m1 * o[3]);
     float inv = 1.0f / det;
     for (int k = 0; k < 12; k++) o[k] = o[k] * inv;
 }
@@ -171,8 +173,8 @@ static void gch_8001e270(uint32_t idx) {
 static void gch_8001e694(float s, float c, float *m) {
     for (int j = 0; j < 3; j++) {
         float c0 = m[j], c1 = m[3 + j];
-        m[j]     = fmaf(c0, c, -(c1 * s));
-        m[3 + j] = fmaf(c0, s, c1 * c);
+        m[j]     = c0 * c - c1 * s;
+        m[3 + j] = c0 * s + c1 * c;
     }
 }
 static void gch_8001e6f8(uint32_t ang, uint32_t idx) {
@@ -182,8 +184,8 @@ static void gch_8001e6f8(uint32_t ang, uint32_t idx) {
 static void gch_8001e7a4(float s, float c, float *m) {
     for (int j = 0; j < 3; j++) {
         float c0 = m[j], c2 = m[6 + j];
-        m[6 + j] = fmaf(c2, c, -(c0 * s));
-        m[j]     = fmaf(c2, s, c0 * c);
+        m[6 + j] = c2 * c - c0 * s;
+        m[j]     = c2 * s + c0 * c;
     }
 }
 static void gch_8001e808(uint32_t ang, uint32_t idx) {
@@ -196,8 +198,8 @@ static void gch_8001e8b4(uint32_t ang, uint32_t idx) {
     float *m = gems_dmf(0x30000u + idx);
     for (int j = 0; j < 3; j++) {
         float c1 = m[3 + j], c2 = m[6 + j];
-        m[3 + j] = fmaf(c1, c, -(c2 * s));
-        m[6 + j] = fmaf(c1, s, c2 * c);
+        m[3 + j] = c1 * c - c2 * s;
+        m[6 + j] = c1 * s + c2 * c;
     }
 }
 static void gch_8001e960(float sx, float sy, float sz, uint32_t idx) {
@@ -208,23 +210,24 @@ static void gch_8001e960(float sx, float sy, float sz, uint32_t idx) {
         m[6 + j] = m[6 + j] * sz;
     }
 }
+/* T plus the 3x3 times (x, y, z), added onto T a term at a time, as the
+ * board's _L20182 (Fn_trans) and _L20173 (Fn_point_trans) do:
+ * ((T + x c0) + y c1) + z c2. The GC sums the products first. */
 static void gch_8001e9dc(float x, float y, float z) {
     float *m = gch_cur();
     for (int j = 0; j < 3; j++) {
-        float t = y * m[3 + j];
-        t = fmaf(x, m[j], t);
-        t = fmaf(z, m[6 + j], t);
-        m[9 + j] = m[9 + j] + t;
+        float t = m[9 + j] + x * m[j];
+        t = t + y * m[3 + j];
+        m[9 + j] = t + z * m[6 + j];
     }
 }
 static void gch_8001ea5c(float x, float y, float z, uint32_t idx, float *ox, float *oy, float *oz) {
     const float *m = gems_dmf(0x30000u + idx);
     float r[3];
     for (int j = 0; j < 3; j++) {
-        float t = y * m[3 + j];
-        t = fmaf(x, m[j], t);
-        t = fmaf(z, m[6 + j], t);
-        r[j] = m[9 + j] + t;
+        float t = m[9 + j] + x * m[j];
+        t = t + y * m[3 + j];
+        r[j] = t + z * m[6 + j];
     }
     *ox = r[0]; *oy = r[1]; *oz = r[2];
 }
@@ -279,22 +282,22 @@ static void gch_80025350(void) {
 
 /* ---- scalar maths ---- */
 
-static float gch_8001d8e0(float x, float y)          { return gch_rsqrt_s(fmaf(x, x, y * y)); }
-static float gch_8001d9e0(float x, float y, float z) { return gch_rsqrt_s(fmaf(z, z, fmaf(x, x, y * y))); }
-static float gch_8001dae4(float x, float y)          { return gch_sqrt_s(fmaf(x, x, y * y)); }
-static float gch_8001dbdc(float x, float y, float z) { return gch_sqrt_s(fmaf(z, z, fmaf(x, x, y * y))); }
+static float gch_8001d8e0(float x, float y)          { return gch_rsqrt_s(x * x + y * y); }
+static float gch_8001d9e0(float x, float y, float z) { return gch_rsqrt_s(z * z + (x * x + y * y)); }
+static float gch_8001dae4(float x, float y)          { return gch_sqrt_s(x * x + y * y); }
+static float gch_8001dbdc(float x, float y, float z) { return gch_sqrt_s(z * z + (x * x + y * y)); }
 static float gch_8001e084(float x) { return gch_sqrt_s(x); }
 static float gch_8001e174(float x) { return gch_rsqrt_s(x); }
 
 static float gch_8001dcd8(float x) {
     if (x <= -1.0f) return -GCH_PI_2;
     if (x >= 1.0f) return GCH_PI_2;
-    return (float)gch_800aea98((double)x);
+    return (float)gcop_fp_nearest(gch_800aea98, (double)x);
 }
 static int32_t gch_8001dd2c(float x) {
     if (x <= -1.0f) return 0xC000;
     if (x >= 1.0f) return 0x4000;
-    return gch_ang_word((float)gch_800aea98((double)x));
+    return gch_ang_word((float)gcop_fp_nearest(gch_800aea98, (double)x));
 }
 
 /* The rational arctangent of t, |t| <= 1. */
@@ -306,12 +309,12 @@ static float gch_atan_p(float t) {
     const float E = 29.7766838073730469f;   /* 0x41EE36A6 */
     const float F = 20.5109291076660156f;   /* 0x41A41662 */
     float s = t * t;
-    float p = fmaf(A, s, B);
+    float p = A * s + B;
     float q = C + s;
-    p = fmaf(s, p, D);
-    q = fmaf(s, q, E);
-    float num = fmaf(s, p, F);
-    float den = fmaf(s, q, F);
+    p = s * p + D;
+    q = s * q + E;
+    float num = s * p + F;
+    float den = s * q + F;
     return (t * num) / den;
 }
 static float gch_8001ddcc(float y, float x) {
@@ -352,15 +355,15 @@ static float gch_8001f9ac(uint32_t ball_idx, float *d, float *p) {
     float e0 = S[1043] - b0, e1 = S[1044] - b1, e2 = S[1045] - b2;
     float f6 = p[0] - e0, f7 = p[1] - e1, f8 = p[2] - e2;
     p[0] = d[0]; p[1] = d[1]; p[2] = d[2];
-    float g = -fmaf(e2, f8, fmaf(e0, f6, e1 * f7));
-    if (g <= 0.0f) return fmaf(e2, e2, fmaf(e0, e0, e1 * e1));
-    float L = fmaf(f8, f8, fmaf(f6, f6, f7 * f7));
+    float g = -(e2 * f8 + (e0 * f6 + e1 * f7));
+    if (g <= 0.0f) return e2 * e2 + (e0 * e0 + e1 * e1);
+    float L = f8 * f8 + (f6 * f6 + f7 * f7);
     if (L <= g) return d[2] * d[2] + (d[0] * d[0] + d[1] * d[1]);
     float t = g / L;
-    float a = fmaf(f7, t, e1);
-    float b = fmaf(f6, t, e0);
-    float c = fmaf(f8, t, e2);
-    return fmaf(c, c, fmaf(b, b, a * a));
+    float a = f7 * t + e1;
+    float b = f6 * t + e0;
+    float c = f8 * t + e2;
+    return c * c + (b * b + a * a);
 }
 
 static void gch_8001faa4(float r, int32_t ball, uint32_t unit, int32_t *n_near, int32_t *n_hit,
@@ -379,7 +382,7 @@ static void gch_8001faa4(float r, int32_t ball, uint32_t unit, int32_t *n_near, 
     L20[1] = L8[1] = S[1041] - S[j + 1];
     L20[2] = L8[2] = S[1042] - S[j + 2];
     float dist = (bit & m11) ? gch_8001f9ac(j, L20, L8)
-                             : fmaf(L20[2], L20[2], fmaf(L20[0], L20[0], L20[1] * L20[1]));
+                             : (L20[2] * L20[2] + (L20[0] * L20[0] + L20[1] * L20[1]));
     float rr = r + R;
     float q = rr * rr;
     if (dist >= q) { *mask &= ~bit; return; }
@@ -387,7 +390,7 @@ static void gch_8001faa4(float r, int32_t ball, uint32_t unit, int32_t *n_near, 
     SU[2035] = (uint32_t)ball;
     SU[2036] = unit;
     if (kind == 4 || kind == 5) {
-        float w = -fmaf(L20[2], L8[2], -(-fmaf(L20[0], L8[0], -q)));
+        float w = ((q - L20[0] * L8[0])) - L20[2] * L8[2];
         float v = kind == 4 ? gch_8001e084(w) - L20[1] : gch_8001e084(w) + L20[1];
         if (!(v <= *push_y)) *push_y = v;
         return;
@@ -453,7 +456,7 @@ static void gch_80021d88(float step, const float *cur, const float *prev, uint32
         SU[b + 4] = o0;
         SU[b + 5] = o1;
         SU[b + 6] = o2;
-        for (int k = 0; k < 12; k++) S[b + 0x14 + k] = fmaf(S[0x2184 + k], t, prev[part * 12 + k]);
+        for (int k = 0; k < 12; k++) S[b + 0x14 + k] = S[0x2184 + k] * t + prev[part * 12 + k];
         h = (h + 1u) & 0x7Fu;
         if (!(0.0f < step)) break;
         t = t + step;

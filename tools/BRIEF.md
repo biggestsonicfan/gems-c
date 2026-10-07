@@ -17,7 +17,7 @@ i960 code (FN) or the SHARC firmware as Gems implemented it (SHARC) does.
 - i960 disassembler: `tools/i960dasm/` (`i960dasm prog.bin 0xSTART 0xEND`)
   (STF's program ROM; the FN INDEX "i960" column is the i960 address; the trap table is `traps.txt`).
 - PowerPC disassembly of stf.elf: `tools/ppc/disasm.sh` (grep the GC address) when Ghidra's output is ambiguous
-  (fused multiply-adds, float vs double rounding, signedness, unreachable blocks Ghidra removed).
+  (float vs double rounding, signedness, unreachable blocks Ghidra removed).
 - [stf-sharc](https://github.com/biggestsonicfan/stf-sharc) (if you have it): the real SHARC firmware sources, for names/intent only — port Gems' C, not the firmware.
 - m2-hle2's own `src/board/sharc_exec.h`, `sharc_coli.h`, `sharc_zanzou.h`: our existing port of the same commands, a useful cross-check of intent.
 
@@ -54,8 +54,10 @@ i960 code (FN) or the SHARC firmware as Gems implemented it (SHARC) does.
   `sharc/state.h` (helpers agent). Each becomes a named static in state.h; `gcop_reset()` (in state.h) puts them at their power-on values.
 - Helpers `FUN_8001xxxx` -> `gch_8001xxxx` with the signatures in `sharc/helpers.h` (helpers agent owns it).
 - Drop Ghidra artifacts: `unaff_GQR0`/`ldexpf(...)` blocks around paired-single loads are quantisation no-ops (GQR0 = 0); `cop_stub_NN` is an empty handler.
-- **Arithmetic must match Gems' PowerPC float code**: the GC computes in single precision (`fadds/fmuls/...`) and uses
-  fused multiply-add (`fmadds/fmsubs/fnmadds/fnmsubs`) — write those as `fmaf(a, b, c)` etc. in the same order, so results are bit-identical.
+- **Arithmetic is the board's**: single precision (`fadds/fmuls/...`), and the GC's fused multiply-adds
+  (`fmadds/fmsubs/fnmadds/fnmsubs`) written as a separate multiply and add (`a * b + c`), never `fmaf`: the SHARC has
+  no FMA. The handlers run under round toward zero (`sharc/fpenv.h`). Where a sum of three or more terms has
+  a firmware counterpart in cpres1.asm, write it in the firmware's order.
   Where Ghidra shows `(double)` round trips, check the PPC: single ops round to float each step. Don't "simplify" float expressions.
 
 ## Unspaghetti, but exact

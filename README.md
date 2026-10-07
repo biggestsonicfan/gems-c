@@ -4,6 +4,11 @@ Sega's C from Sonic Gems Collection (GameCube, `stf.elf`), cleaned up so it
 builds inside [m2-hle2](https://github.com/biggestsonicfan/m2-hle2) against
 `src/core/gems.h`.
 
+The aim is C hooks for the emulator that are as close to the board as we can
+make them, not a copy of Gems: where the board does something else, follow the
+board. A faithful record of Gems' C is
+[gems-decomp](https://github.com/biggestsonicfan/gems-decomp) (`decomp/`).
+
 m2-hle2 itself has only the framework: `gems.h`, the CMake option and the
 command-line flags. A build without this repository still accepts the flags,
 which then log that they do nothing.
@@ -310,7 +315,8 @@ the GC build, handler by handler and for every FN trap:
   `tri_shin` replies NaN, whole-word selector compares). The FN traps are
   the same in both.
 - The EE rounds toward zero and has no FMA, like the board's SHARC
-  (`mode1` TRUNCATE + RND32). The conversion keeps the GC's arithmetic.
+  (`mode1` TRUNCATE + RND32). The conversion still uses the GC's FMA and
+  round-to-nearest, so it is not bit for bit the board.
 
 ## Status (2026-10-04)
 

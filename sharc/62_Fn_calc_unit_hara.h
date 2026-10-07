@@ -31,7 +31,9 @@ static void gcop_62(void) {
     m[6] = fmaf(s0, s2, -(c2 * (c0 * s1)));
     m[2] = s1;
     m[4] = fmaf(c0, c2, -(s1 * (s0 * s2)));
-    m[7] = fmaf(c0, s2, s1 * (c2 * s0));
+    /* The board's order (cpres1.asm _L211C0, PM 0x211C0): (s0*s1)*c2, like
+     * m[3], m[4] and m[6].  The GC (0x80023c2c) and the PS2 do (s0*c2)*s1. */
+    m[7] = fmaf(c0, s2, c2 * (s0 * s1));
     m[8] = c1 * c2;
     m[5] = -(c1 * s2);
 

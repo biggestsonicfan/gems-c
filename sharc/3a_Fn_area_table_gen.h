@@ -27,8 +27,11 @@ static void gcop_3a(void) {
             if (take && kind_a != 4u) r = r * *gems_dmf(0x306F0u);   /* state+7104 */
             lo = lo - r;
             hi = hi + r;
-            lo_tab[gch_800a2544(fmaf(8.0f, lo, 32.0f) - 0.5f) & 63u] |= bit;
-            hi_tab[gch_800a2544(fmaf(8.0f, hi, 32.0f) - 0.5f) & 63u] |= bit;
+            /* Signed, so a cell below 0 wraps to the top (-3 -> 61).  From the
+             * PS2 build (0x15ff40: cvt.w.s, andi 0x3f), which matches the
+             * board (r2=fix f8; r2 and 0x3f); the GC one makes it 0. */
+            lo_tab[(uint32_t)gch_fctiwz(fmaf(8.0f, lo, 32.0f) - 0.5f) & 63u] |= bit;
+            hi_tab[(uint32_t)gch_fctiwz(fmaf(8.0f, hi, 32.0f) - 0.5f) & 63u] |= bit;
         }
         for (int j = 1; j < 63; j++) lo_tab[j] |= lo_tab[j - 1];
         for (int j = 1; j < 63; j++) hi_tab[63 - j] |= hi_tab[64 - j];

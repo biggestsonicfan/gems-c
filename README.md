@@ -296,6 +296,22 @@ there. It is not tracked.
 - **Where the flags are wired in:** `src/main.c` parses them, and
   `gems_apply()` runs after the profile installs.
 
+## The PS2 build (2026-10-07)
+
+Gems' PS2 build compiles the same C for the Emotion Engine. Compared with
+the GC build, handler by handler and for every FN trap:
+
+- It is better in two places, and the conversion now follows it:
+  - `Fn_outside_ball` (72) adds the push-out (dx, dz) and counts a NaN as
+    outside. The GC handler drops both args.
+  - `Fn_area_table_gen` (3a) turns a cell below 0 into an index signed, so it
+    wraps (`& 63`). The GC handler makes it 0.
+- Everywhere else it is the same as the GC or worse (no zero guard in rsqrt,
+  `tri_shin` replies NaN, whole-word selector compares). The FN traps are
+  the same in both.
+- The EE rounds toward zero and has no FMA, like the board's SHARC
+  (`mode1` TRUNCATE + RND32). The conversion keeps the GC's arithmetic.
+
 ## Status (2026-10-04)
 
 Measured with `M2HLE_GEMS_VERIFY_ALL=1 tools/run/runverify.sh 450 --gems-verify`

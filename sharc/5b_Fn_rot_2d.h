@@ -6,6 +6,6 @@ static void gcop_5b(void) {
     float x = gems_in_f(), y = gems_in_f();
     float s, c;
     gch_8001ead8(&s, &c, ang);
-    gems_out_f(fmaf(c, x, -(s * y)));
-    gems_out_f(fmaf(s, x, c * y));
+    gems_out_f(c * x - s * y);
+    gems_out_f(s * x + c * y);
 }

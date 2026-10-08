@@ -18,7 +18,7 @@ static inline uint32_t *g4a_w(uint32_t o) { return gems_dm(0x30000u + o / 4u); }
 static void g4a_mat_mul(const float *a, const float *b, float *out) {
     for (int r = 0; r < 4; r++)
         for (int j = 0; j < 3; j++) {
-            float v = fmaf(b[6 + j], a[3 * r + 2], fmaf(b[j], a[3 * r], b[3 + j] * a[3 * r + 1]));
+            float v = b[6 + j] * a[3 * r + 2] + (b[j] * a[3 * r] + b[3 + j] * a[3 * r + 1]);
             out[3 * r + j] = (r == 3) ? b[9 + j] + v : v;
         }
 }
@@ -28,7 +28,8 @@ static void g4a_sphere(float *p, uint32_t o) {
     float dy = p[1] - *g4a_f(o + 4u);
     float dx = p[0] - *g4a_f(o);
     float dz = p[2] - *g4a_f(o + 8u);
-    float s = fmaf(dz, dz, fmaf(dx, dx, dy * dy));
+    float s = dz * dz + dy * dy;      /* the board's order (_L20873) */
+    s = s + dx * dx;
     if (!(*g4a_f(o + 16u) >= s)) return;
     float k = *g4a_f(o + 12u) * gch_8001e174(s);
     dx = dx * k;
@@ -43,10 +44,10 @@ static void g4a_sphere(float *p, uint32_t o) {
 static void g4a_plane(float *p, uint32_t o) {
     float x = p[0];
     float n0 = *g4a_f(o);
-    float t = *g4a_f(o + 8u) - fmaf(n0, x, *g4a_f(o + 4u) * p[1]);
+    float t = *g4a_f(o + 8u) - (n0 * x + *g4a_f(o + 4u) * p[1]);
     if (!(t >= 0.0f)) return;
-    p[0] = fmaf(n0, t, x);
-    p[1] = fmaf(*g4a_f(o + 4u), t, p[1]);
+    p[0] = n0 * t + x;
+    p[1] = *g4a_f(o + 4u) * t + p[1];
 }
 
 /* Gems' 0x8002567c: keep a point below the floor plane inside the body regions. */
@@ -70,7 +71,7 @@ static void g4a_region(float *p) {
         g4a_sphere(p, 3372u);
         return;
     }
-    float s = fmaf(y, y, p[0] * p[0]);
+    float s = y * y + p[0] * p[0];
     if (*g4a_f(3396u) >= s) {
         float k = *g4a_f(3392u) * gch_8001e174(s);
         p[0] = p[0] * k;
@@ -82,11 +83,11 @@ static void g4a_region(float *p) {
 /* Gems' 0x80025d90: above the floor plane, project onto it; else the regions. */
 static void g4a_constrain(float *p) {
     float n0 = *g4a_f(3336u), n1 = *g4a_f(3340u), n2 = *g4a_f(3344u);
-    float t = *g4a_f(3348u) - fmaf(n2, p[2], fmaf(n0, p[0], n1 * p[1]));
+    float t = *g4a_f(3348u) - (n2 * p[2] + (n0 * p[0] + n1 * p[1]));
     if (t >= 0.0f) {
-        p[0] = fmaf(n0, t, p[0]);
-        p[1] = fmaf(*g4a_f(3340u), t, p[1]);
-        p[2] = fmaf(*g4a_f(3344u), t, p[2]);
+        p[0] = n0 * t + p[0];
+        p[1] = *g4a_f(3340u) * t + p[1];
+        p[2] = *g4a_f(3344u) * t + p[2];
     } else {
         g4a_region(p);
     }
@@ -100,19 +101,19 @@ static void g4a_load(uint32_t dst, uint32_t n) {
     }
 }
 
-/* One end of the segment: M's T + M (a, b, z) */
+/* One end of the segment: M's T + M (a, b, z), added onto T a term at a time
+ * as the board's _L20173 does; the GC sums the products first. */
 static void g4a_end(uint32_t rec, uint32_t m_off, uint32_t dst) {
     float a = gems_bram_rdf(rec);
     float b = gems_bram_rdf(rec + 1u);
     float z = gems_bram_rdf(rec + 2u);
     const float *M = g4a_f(m_off);
-    float r0 = M[9]  + fmaf(z, M[6], fmaf(a, M[0], b * M[3]));
-    float r1 = M[10] + fmaf(z, M[7], fmaf(a, M[1], b * M[4]));
-    float r2 = M[11] + fmaf(z, M[8], fmaf(a, M[2], b * M[5]));
     float *d = g4a_f(dst);
-    d[0] = r0;
-    d[1] = r1;
-    d[2] = r2;
+    for (int j = 0; j < 3; j++) {
+        float t = M[9 + j] + a * M[j];
+        t = t + b * M[3 + j];
+        d[j] = t + z * M[6 + j];
+    }
 }
 
 /* Gems' 0x8002590c: one segment */

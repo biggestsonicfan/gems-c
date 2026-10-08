@@ -12,12 +12,12 @@ static void gcop_69(void) {
     float *m = gch_cur();
     float s, c;
     gch_8001ead8(&s, &c, ang);
-    m[0] = fmaf(c, t[0], -(s * t[2]));
-    m[3] = fmaf(c, t[3], -(s * t[5]));
-    m[6] = fmaf(c, t[6], -(s * t[8]));
-    m[2] = fmaf(s, t[0], c * t[2]);
-    m[5] = fmaf(s, t[3], c * t[5]);
-    m[8] = fmaf(s, t[6], c * t[8]);
+    m[0] = c * t[0] - s * t[2];
+    m[3] = c * t[3] - s * t[5];
+    m[6] = c * t[6] - s * t[8];
+    m[2] = s * t[0] + c * t[2];
+    m[5] = s * t[3] + c * t[5];
+    m[8] = s * t[6] + c * t[8];
     m[1] = t[1];
     m[4] = t[4];
     m[7] = t[7];

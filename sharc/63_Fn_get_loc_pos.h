@@ -7,12 +7,12 @@ static void gcop_63(void) {
     float x1 = gems_in_f(), y1 = gems_in_f(), z1 = gems_in_f();
     float s, c;
     gch_8001ead8(&s, &c, ang);
-    float u = fmaf(c, z1, s * x0);
-    float v = fmaf(c, x1, s * z1);
-    u = -fmaf(s, x1, -u);
-    v = -fmaf(s, z0, -v);
-    float rz = -fmaf(c, z0, -u);
-    float rx = -fmaf(c, x0, -v);
+    float u = c * z1 + s * x0;
+    float v = c * x1 + s * z1;
+    u = u - s * x1;
+    v = v - s * z0;
+    float rz = u - c * z0;
+    float rx = v - c * x0;
     gems_out_f(rx);
     gems_out_f(y1 - y0);
     gems_out_f(rz);

@@ -8,7 +8,7 @@ static void gcop_6a(void) {
     float dy = y - m[10];
     float dx = x - m[9];
     float dz = z - m[11];
-    gems_out_f(fmaf(m[2], dz, fmaf(m[0], dx, m[1] * dy)));
-    gems_out_f(fmaf(m[5], dz, fmaf(m[3], dx, m[4] * dy)));
-    gems_out_f(fmaf(m[8], dz, fmaf(m[6], dx, m[7] * dy)));
+    gems_out_f(m[2] * dz + (m[0] * dx + m[1] * dy));
+    gems_out_f(m[5] * dz + (m[3] * dx + m[4] * dy));
+    gems_out_f(m[8] * dz + (m[6] * dx + m[7] * dy));
 }

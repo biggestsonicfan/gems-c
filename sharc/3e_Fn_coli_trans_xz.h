@@ -7,7 +7,7 @@ static void gcop_3e(void) {
     float px = gems_in_f();
     float py = gems_in_f();
     float pz = gems_in_f();
-    float len = gch_8001e084(fmaf(dx, dx, dz * dz));
+    float len = gch_8001e084(dx * dx + dz * dz);
     float c = dx / len;
     float s = dz / len;
     static const uint32_t src[4] = { 16000u, 0x3EE0u, 0x7E80u, 0x7EE0u };
@@ -19,9 +19,9 @@ static void gcop_3e(void) {
             float y = gems_bram_rdf(si + 1u);
             float z = gems_bram_rdf(si + 2u) - pz;
             x = x - px;
-            gems_bram_wrf(di, fmaf(x, c, z * s));
+            gems_bram_wrf(di, (x * c + z * s));
             gems_bram_wrf(di + 1u, y - py);
-            gems_bram_wrf(di + 2u, fmaf(z, c, -(x * s)));   /* fmsubs */
+            gems_bram_wrf(di + 2u, (z * c - x * s));
         }
     }
 }

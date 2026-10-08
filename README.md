@@ -47,7 +47,9 @@ kept beside it, for reference.
 Neither flag is the board:
 - A trapped function is charged as one i960 instruction, so the timers (and
   `rand` at `0x66B0`, which reads them) see less time.
-- Gems' COP is PowerPC single precision with fused multiply-add, not the SHARC.
+- Gems' COP keeps the GC's algorithms for division, square roots, atan2 and
+  sin/cos, where the SHARC firmware has its own (see "The COP's arithmetic").
+  Its arithmetic is the board's: no fused multiply-add, round toward zero.
 
 A netplay session turns both flags off (`g_hle_extra_session_off`). Both apply
 only to the sfight set (both STF profiles).
@@ -60,9 +62,10 @@ only to the sfight set (both STF profiles).
 | `fn_protos.h` | prototypes of every `gfn_*`, so files can call each other in any order |
 | `sharc/NN_<name>.h` | one COP command: `static void gcop_NN(void)`, NN = lowercase hex opcode |
 | `sharc/helpers.h` | the firmware helpers Gems calls: `gch_<GC address>` |
+| `sharc/fpenv.h` | the SHARC's float mode (round toward zero, flush to zero) around each handler; see "The COP's arithmetic" |
 | `sharc/state.h` | Gems' COP globals (r13 sdata), the 64K-entry sine table, `gcop_reset()` |
 | `traps.txt` | the trap table, read by `gen_all.py` |
-| `gen_all.py` | writes `gems_all.h`: includes plus `gems_traps[]` and `gems_cop_ops[]`. Only functions that are defined go in the tables, so a half-converted tree builds. Argument and reply counts come from `decomp/SHARC/INDEX.md` |
+| `gen_all.py` | writes `gems_all.h`: includes plus `gems_traps[]` and `gems_cop_ops[]` (each handler wrapped in `gcop_board_run`; `--cop-only` leaves out `fn/` and the traps). Only functions that are defined go in the tables, so a half-converted tree builds. Argument and reply counts come from `decomp/SHARC/INDEX.md` |
 | `gems_all.h` | written by `gen_all.py`; not tracked (`.gitignore`) |
 | `gems_impl.h` | what `gems.h` includes (`fn_protos.h` + `gems_all.h`) |
 | `check.sh` | syntax-check everything against an m2-hle2 tree (makes its own `gems_all.h` in a temp dir) |
@@ -247,7 +250,7 @@ there. It is not tracked.
   `/dev/shm/gems/text1.s`), to grep by GC address. Read it when Ghidra's C is
   ambiguous:
   - fused multiply-adds (`fmadds` / `fmsubs` / `fnmadds` / `fnmsubs`, written
-    as `fmaf` in the same order)
+    as a separate multiply and add: the board has no FMA)
   - single against double rounding
   - signedness of a load (`lha` against `lhz`)
   - blocks Ghidra dropped as unreachable
@@ -315,8 +318,88 @@ the GC build, handler by handler and for every FN trap:
   `tri_shin` replies NaN, whole-word selector compares). The FN traps are
   the same in both.
 - The EE rounds toward zero and has no FMA, like the board's SHARC
-  (`mode1` TRUNCATE + RND32). The conversion still uses the GC's FMA and
-  round-to-nearest, so it is not bit for bit the board.
+  (`mode1` TRUNCATE + RND32). The conversion now does the same (next
+  section).
+
+## The COP's arithmetic (Pinboard #548)
+
+The board's SHARC firmware sets MODE1 = 0x18000 at boot (cpres1.asm): every
+multiply and every add is rounded on its own, toward zero, to a 32-bit single.
+It has no fused multiply-add, and denormals are flushed to zero. The handlers
+here now compute the same way:
+
+- **No FMA.** Each of the GC's `fmadds` / `fmsubs` / `fnmadds` / `fnmsubs` is
+  a multiply and an add (`a * b + c`). m2-hle2 builds with
+  `-ffp-contract=off`, so the compiler fuses none of them back.
+- **Round toward zero, flush to zero**, set around each handler by
+  `sharc/fpenv.h`. `gen_all.py` wraps every table entry, the reset, and the
+  zanzou feed in `gcop_board_run`. It saves the host's mode, sets the board's,
+  calls through a volatile pointer, and puts the host's back, so no other float
+  code in m2-hle2 runs in it. On x86-64 that is MXCSR (RC, FTZ, DAZ). On
+  AArch64 it is FPCR, and on SH-4 FPSCR. Elsewhere it falls back to
+  `fesetround`. WebAssembly has round-to-nearest only and runs as before. The
+  cost did not show: a replay of 676,781 commands takes the same 0.05-0.07 s
+  either way.
+- `-DGEMS_COP_NEAREST` keeps the host's round-to-nearest, for comparisons.
+- The GC's fdlibm (`tan`, `asin`) is double precision written for
+  round-to-nearest. It runs under `gcop_fp_nearest`.
+- **The firmware's order where a sum has three or more terms.** The GC sums the
+  products first, while `Fn_trans`, `Fn_point_trans` and `Fn_osage`'s segment
+  ends add onto T a term at a time (`_L20182`, `_L20173`). Osage's sphere adds
+  (z² + y²) + x² (`_L20873`). The other sums were checked against cpres1.asm
+  and already agree.
+
+What stays the GC's are its algorithms. The board divides with a `recips` seed
+and three Newton steps (`_L205D0`), and has its own sqrt and 1/sqrt. Its
+atan2 is ADI's (`_L202D1`), and its sin and cos come from the COP data ROM's
+tables. m2-hle2's `sharc_fw_div`, `sharc_fw_sqrt`, `sharc_fw_rsqrt`,
+`sharc_fw_atan2` and `sharc_sincos` model them. These are what the table
+below still misses.
+
+### Checking it: `tools/cop_replay/`
+
+`capture.lua` records the COP firmware's side of its FIFOs off MAME, from
+power-on to 600 frames into attract's replay fight. With `CAP_SNAP=1` it also
+records the current matrix before every command. `build.sh <m2-hle2> [out]`
+builds `gems_cop_replay`: m2-hle2's `tests/cop_replay.c` with the handlers
+here in place of `sharc_exec` (op 0x78 and anything Gems leaves empty still
+go to ours).
+
+```bash
+cd <scratch>   # not the ROM folder
+CAP_OUT=$PWD/cap CAP_SNAP=1 mame sfight -rompath $ROMS_DIR -nodrc -video none -sound none \
+    -nothrottle -skip_gameinfo -seconds_to_run 299 -cfg_directory cfg -nvram_directory nv \
+    -autoboot_script <this repo>/tools/cop_replay/capture.lua
+tools/cop_replay/build.sh <m2-hle2> /dev/shm/gcr/gems_cop_replay
+COPRO_ROM=<the interleaved mpr-19015/19016> RESYNC=1 STATE_EXACT=1 \
+    /dev/shm/gcr/gems_cop_replay <scratch>/cap 0
+```
+
+`RESYNC` puts the board's matrix in before each command, so one command's
+difference does not run into the next. `STATE_EXACT` counts a matrix that
+differs in any bit as a bad state.
+
+Stock MAME's SHARC ignores TRUNCATE: its DRC rounds to nearest, and so does
+its interpreter. So "the board" below is a MAME whose SHARC rounds toward zero
+in both. That was a throwaway build, made from the fork's branch
+`idea-548-sharc-rz-exp`. The table gives reply words bit for bit, of 748,805,
+over one capture each (2026-10-07):
+
+| handlers | vs MAME, toward zero (the board) | vs stock MAME (nearest) |
+|---|---|---|
+| main before #548 (GC: FMA, nearest) | 82.37% | 90.38% |
+| no FMA, board order, nearest | – | 93.66% |
+| no FMA, board order, toward zero (now) | **92.63%** | – |
+| m2-hle2's `sharc_exec` | 69.24% | 84.70% |
+
+Against the board, these are now exact for every word: `Fn_div`, `Fn_sub`,
+`Fn_mul3`, `Fn_get_inner_2d`, `Fn_glo_to_loc`, `Fn_point_trans`,
+`Fn_area_coli`, `Fn_mul_matrix`, `Fn_mul_unit_mat` and
+`Fn_mul_matrix_inner`. The rest is the algorithms above:
+- sin/cos: `sin`, `cos`, `tan`, the rotations, `rot_2d`, `get_loc_pos`, `calc_unit_hara`
+- sqrt: `sqr`, the lengths, `regular_vector`, and `osage` (its points carry over from frame to frame)
+- atan2: `get_2d_dir`, `sm_ang_f`/`_r`
+- the divide: `fcurve_lin`/`_spl`, `inv_matrix`
 
 ## Status (2026-10-04)
 
